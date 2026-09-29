@@ -14,6 +14,18 @@ let appState = {
   prodFotosEdicion: []
 };
 
+// Adjunta la sesión a todas las llamadas internas de la API.
+const fetchOriginal = window.fetch.bind(window);
+window.fetch = (input, init = {}) => {
+  const url = typeof input === 'string' ? input : input.url;
+  const token = localStorage.getItem('app_token') || sessionStorage.getItem('app_token');
+  const headers = new Headers(init.headers || (typeof input !== 'string' ? input.headers : undefined));
+  if (token && url.startsWith('/api/') && !url.endsWith('/auth/login')) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+  return fetchOriginal(input, { ...init, headers });
+};
+
 // INICIALIZACIÓN Y SESIÓN
 document.addEventListener('DOMContentLoaded', () => {
   inicializarTema();
@@ -173,13 +185,23 @@ function setCustomSelectValue(val) {
 }
 
 // --- AUTENTICACIÓN ---
-function verificarSesion() {
+async function verificarSesion() {
   const token = localStorage.getItem('app_token') || sessionStorage.getItem('app_token');
   const user = localStorage.getItem('app_user') || sessionStorage.getItem('app_user');
   
   if (token && user) {
-    appState.usuario = user;
-    mostrarApp();
+    try {
+      const res = await fetch('/api/auth/me');
+      if (!res.ok) throw new Error('Sesión vencida');
+      appState.usuario = user;
+      mostrarApp();
+    } catch (_) {
+      localStorage.removeItem('app_token');
+      localStorage.removeItem('app_user');
+      sessionStorage.removeItem('app_token');
+      sessionStorage.removeItem('app_user');
+      mostrarLogin();
+    }
   } else {
     mostrarLogin();
   }
@@ -237,6 +259,22 @@ function cerrarSesion() {
   sessionStorage.removeItem('app_token');
   sessionStorage.removeItem('app_user');
   location.reload();
+}
+
+async function descargarRespaldo() {
+  try {
+    const res = await fetch('/api/backup/download');
+    if (!res.ok) throw new Error('No se pudo generar el respaldo');
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `respaldo_ventas_${new Date().toISOString().slice(0, 10)}.zip`;
+    link.click();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    mostrarToast(err.message, 'error');
+  }
 }
 
 async function cambiarPassword(e) {

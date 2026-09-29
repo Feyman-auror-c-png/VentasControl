@@ -2,17 +2,20 @@ import os
 import shutil
 import zipfile
 import uuid
+import json
+import tempfile
 from datetime import datetime, date
 from typing import List, Optional
-from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi import Depends, FastAPI, HTTPException, UploadFile, File
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from .database import (
     init_db, get_db, hash_password,
-    BASE_DIR, UPLOADS_DIR, ARTICULOS_DIR, COMPROBANTES_DIR, DB_PATH
+    BASE_DIR, UPLOADS_DIR
 )
+from .auth import create_session, get_current_user
 from .exchange_rate import get_current_rate, set_manual_rate
 from .whatsapp_helper import generate_whatsapp_message, get_whatsapp_url
 
@@ -28,7 +31,7 @@ class LoginRequest(BaseModel):
     password: str
 
 class PasswordChangeRequest(BaseModel):
-    usuario: str
+    usuario: Optional[str] = None
     password_actual: str
     nueva_password: str
 
@@ -93,14 +96,19 @@ def login(req: LoginRequest):
             "ok": True,
             "usuario": u["usuario"],
             "nombre": u["nombre"],
-            "token": f"session_{u['id']}_{hash_password(u['password_hash'])[:16]}"
+            "workspace": u["workspace_id"],
+            "token": create_session(u["id"])
         }
 
+@app.get("/api/auth/me")
+def auth_me(user=Depends(get_current_user)):
+    return {"ok": True, "usuario": user["usuario"], "nombre": user["nombre"], "workspace": user["workspace_nombre"]}
+
 @app.post("/api/auth/change-password")
-def change_password(req: PasswordChangeRequest):
+def change_password(req: PasswordChangeRequest, user=Depends(get_current_user)):
     with get_db() as conn:
         cursor = conn.cursor()
-        u = cursor.execute("SELECT * FROM usuarios WHERE usuario = ?", (req.usuario.strip(),)).fetchone()
+        u = cursor.execute("SELECT * FROM usuarios WHERE id = ?", (user["id"],)).fetchone()
         if not u or u["password_hash"] != hash_password(req.password_actual):
             raise HTTPException(status_code=400, detail="Contraseña actual incorrecta")
         if len(req.nueva_password) < 4:
@@ -111,57 +119,72 @@ def change_password(req: PasswordChangeRequest):
 # --- SUBIDA DE ARCHIVOS ---
 
 @app.post("/api/upload/articulo")
-async def upload_articulo(file: UploadFile = File(...)):
+async def upload_articulo(file: UploadFile = File(...), user=Depends(get_current_user)):
     ext = os.path.splitext(file.filename)[1].lower()
     if ext not in [".jpg", ".jpeg", ".png", ".webp", ".heic"]:
         ext = ".jpg"
     filename = f"art_{uuid.uuid4().hex[:12]}{ext}"
-    filepath = os.path.join(ARTICULOS_DIR, filename)
+    target_dir = os.path.join(UPLOADS_DIR, str(user["workspace_id"]), "articulos")
+    os.makedirs(target_dir, exist_ok=True)
+    filepath = os.path.join(target_dir, filename)
     with open(filepath, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
-    return {"ok": True, "url": f"/uploads/articulos/{filename}"}
+    return {"ok": True, "url": f"/uploads/{user['workspace_id']}/articulos/{filename}"}
 
 @app.post("/api/upload/articulos")
-async def upload_articulos(files: List[UploadFile] = File(...)):
+async def upload_articulos(files: List[UploadFile] = File(...), user=Depends(get_current_user)):
     urls = []
+    target_dir = os.path.join(UPLOADS_DIR, str(user["workspace_id"]), "articulos")
+    os.makedirs(target_dir, exist_ok=True)
     for file in files:
         ext = os.path.splitext(file.filename)[1].lower()
         if ext not in [".jpg", ".jpeg", ".png", ".webp", ".heic"]:
             ext = ".jpg"
         filename = f"art_{uuid.uuid4().hex[:12]}{ext}"
-        filepath = os.path.join(ARTICULOS_DIR, filename)
+        filepath = os.path.join(target_dir, filename)
         with open(filepath, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
-        urls.append(f"/uploads/articulos/{filename}")
+        urls.append(f"/uploads/{user['workspace_id']}/articulos/{filename}")
     return {"ok": True, "urls": urls}
 
 @app.post("/api/upload/comprobante")
-async def upload_comprobante(file: UploadFile = File(...)):
+async def upload_comprobante(file: UploadFile = File(...), user=Depends(get_current_user)):
     ext = os.path.splitext(file.filename)[1].lower()
     if ext not in [".jpg", ".jpeg", ".png", ".webp", ".heic"]:
         ext = ".jpg"
     filename = f"comp_{uuid.uuid4().hex[:12]}{ext}"
-    filepath = os.path.join(COMPROBANTES_DIR, filename)
+    target_dir = os.path.join(UPLOADS_DIR, str(user["workspace_id"]), "comprobantes")
+    os.makedirs(target_dir, exist_ok=True)
+    filepath = os.path.join(target_dir, filename)
     with open(filepath, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
-    return {"ok": True, "url": f"/uploads/comprobantes/{filename}"}
+    return {"ok": True, "url": f"/uploads/{user['workspace_id']}/comprobantes/{filename}"}
 
 # --- RESPALDO ---
 
 @app.get("/api/backup/download")
-def download_backup():
+def download_backup(user=Depends(get_current_user)):
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     zip_filename = f"respaldo_ventas_{timestamp}.zip"
-    zip_path = os.path.join(BASE_DIR, zip_filename)
-    
+    zip_path = os.path.join(tempfile.gettempdir(), f"{user['workspace_id']}_{zip_filename}")
+    wid = user["workspace_id"]
+    with get_db() as conn:
+        datos = {
+            "workspace": user["workspace_nombre"],
+            "productos": [dict(r) for r in conn.execute("SELECT * FROM productos WHERE workspace_id = ?", (wid,))],
+            "ventas": [dict(r) for r in conn.execute("SELECT * FROM ventas WHERE workspace_id = ?", (wid,))],
+            "venta_items": [dict(r) for r in conn.execute("SELECT vi.* FROM venta_items vi JOIN ventas v ON v.id = vi.venta_id WHERE v.workspace_id = ?", (wid,))],
+            "abonos": [dict(r) for r in conn.execute("SELECT a.* FROM abonos a JOIN ventas v ON v.id = a.venta_id WHERE v.workspace_id = ?", (wid,))],
+            "configuracion": [dict(r) for r in conn.execute("SELECT * FROM configuracion WHERE workspace_id = ?", (wid,))],
+        }
     with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-        if os.path.exists(DB_PATH):
-            zipf.write(DB_PATH, arcname="control_ventas.db")
-        if os.path.exists(UPLOADS_DIR):
-            for root, dirs, files in os.walk(UPLOADS_DIR):
+        zipf.writestr("datos.json", json.dumps(datos, ensure_ascii=False, indent=2))
+        workspace_uploads = os.path.join(UPLOADS_DIR, str(wid))
+        if os.path.exists(workspace_uploads):
+            for root, dirs, files in os.walk(workspace_uploads):
                 for file in files:
                     full_path = os.path.join(root, file)
-                    rel_path = os.path.relpath(full_path, BASE_DIR)
+                    rel_path = os.path.relpath(full_path, workspace_uploads)
                     zipf.write(full_path, arcname=rel_path)
 
     return FileResponse(zip_path, filename=zip_filename, media_type="application/zip")
@@ -169,14 +192,15 @@ def download_backup():
 # --- DASHBOARD & BALANCE ENTRE HERMANOS ---
 
 @app.get("/api/dashboard")
-def get_dashboard():
-    tasa = get_current_rate()
+def get_dashboard(user=Depends(get_current_user)):
+    wid = user["workspace_id"]
+    tasa = get_current_rate(wid)
     today = date.today()
     
     with get_db() as conn:
         cursor = conn.cursor()
         
-        cfg_rows = {r["clave"]: r["valor"] for r in cursor.execute("SELECT clave, valor FROM configuracion").fetchall()}
+        cfg_rows = {r["clave"]: r["valor"] for r in cursor.execute("SELECT clave, valor FROM configuracion WHERE workspace_id = ?", (wid,)).fetchall()}
         dias_alerta = int(cfg_rows.get("dias_alerta_atraso", 20))
         socio_1 = cfg_rows.get("socio_1", "Hermano 1")
         socio_2 = cfg_rows.get("socio_2", "Hermano 2")
@@ -187,9 +211,9 @@ def get_dashboard():
                    MAX(a.fecha_abono) as ultimo_abono_fecha
             FROM ventas v
             LEFT JOIN abonos a ON v.id = a.venta_id
-            WHERE v.estado != 'anulada'
+            WHERE v.workspace_id = ? AND v.estado != 'anulada'
             GROUP BY v.id
-        """).fetchall()
+        """, (wid,)).fetchall()
 
         total_ventas_gtq = 0.0
         total_cobrado_gtq = 0.0
@@ -225,7 +249,7 @@ def get_dashboard():
         ganancia_neta_estimada = total_ventas_gtq - costo_total_gtq
 
         # Balance entre Hermanos (Quién tiene el dinero cobrado)
-        abonos_all = cursor.execute("SELECT monto_gtq, recibido_por FROM abonos").fetchall()
+        abonos_all = cursor.execute("SELECT a.monto_gtq, a.recibido_por FROM abonos a JOIN ventas v ON v.id = a.venta_id WHERE v.workspace_id = ?", (wid,)).fetchall()
         cobrado_socio_1 = 0.0
         cobrado_socio_2 = 0.0
 
@@ -269,15 +293,16 @@ def get_dashboard():
 # --- VENTAS CRUD ---
 
 @app.get("/api/ventas")
-def listar_ventas(estado: Optional[str] = None, q: Optional[str] = None):
-    tasa = get_current_rate()
+def listar_ventas(estado: Optional[str] = None, q: Optional[str] = None, user=Depends(get_current_user)):
+    wid = user["workspace_id"]
+    tasa = get_current_rate(wid)
     today = date.today()
     mes_actual_prefijo = today.strftime("%Y-%m")
     
     with get_db() as conn:
         cursor = conn.cursor()
         
-        cfg_row = cursor.execute("SELECT valor FROM configuracion WHERE clave = 'dias_alerta_atraso'").fetchone()
+        cfg_row = cursor.execute("SELECT valor FROM configuracion WHERE workspace_id = ? AND clave = 'dias_alerta_atraso'", (wid,)).fetchone()
         dias_alerta = int(cfg_row["valor"]) if cfg_row else 20
 
         query = """
@@ -286,9 +311,9 @@ def listar_ventas(estado: Optional[str] = None, q: Optional[str] = None):
                    MAX(a.fecha_abono) as ultimo_abono_fecha
             FROM ventas v
             LEFT JOIN abonos a ON v.id = a.venta_id
-            WHERE 1=1
+            WHERE v.workspace_id = ?
         """
-        params = []
+        params = [wid]
         if estado:
             query += " AND v.estado = ?"
             params.append(estado)
@@ -373,8 +398,9 @@ def listar_ventas(estado: Optional[str] = None, q: Optional[str] = None):
         return resultado
 
 @app.post("/api/ventas")
-def crear_venta(data: VentaCreate):
-    tasa = get_current_rate()
+def crear_venta(data: VentaCreate, user=Depends(get_current_user)):
+    wid = user["workspace_id"]
+    tasa = get_current_rate(wid)
     fecha_venta = data.fecha_venta or date.today().strftime("%Y-%m-%d")
 
     with get_db() as conn:
@@ -385,7 +411,7 @@ def crear_venta(data: VentaCreate):
         
         for it in data.items:
             if it.producto_id:
-                p_row = cursor.execute("SELECT foto_url, detalles_incluye FROM productos WHERE id = ?", (it.producto_id,)).fetchone()
+                p_row = cursor.execute("SELECT foto_url, detalles_incluye FROM productos WHERE id = ? AND workspace_id = ?", (it.producto_id, wid)).fetchone()
                 if p_row:
                     if not foto_final and p_row["foto_url"]:
                         foto_final = p_row["foto_url"]
@@ -394,11 +420,12 @@ def crear_venta(data: VentaCreate):
 
         cursor.execute("""
             INSERT INTO ventas (
-                comprador_nombre, comprador_telefono, fecha_venta, dia_pago_mes,
+                workspace_id, comprador_nombre, comprador_telefono, fecha_venta, dia_pago_mes,
                 total_gtq, costo_total_usd, tasa_cambio_aplicada, meses_estimados,
                 foto_articulo, detalles_entrega, notas, estado
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'activa')
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'activa')
         """, (
+            wid,
             data.comprador_nombre.strip(),
             data.comprador_telefono.strip() if data.comprador_telefono else "",
             fecha_venta,
@@ -427,7 +454,7 @@ def crear_venta(data: VentaCreate):
                 it.costo_unitario_usd
             ))
             if it.producto_id:
-                cursor.execute("UPDATE productos SET stock = MAX(0, stock - ?) WHERE id = ?", (it.cantidad, it.producto_id))
+                cursor.execute("UPDATE productos SET stock = MAX(0, stock - ?) WHERE id = ? AND workspace_id = ?", (it.cantidad, it.producto_id, wid))
 
         if data.enganche_inicial > 0:
             cursor.execute("""
@@ -441,7 +468,8 @@ def crear_venta(data: VentaCreate):
         return {"ok": True, "venta_id": venta_id, "mensaje": "Venta registrada con éxito"}
 
 @app.get("/api/ventas/{venta_id}")
-def obtener_venta(venta_id: int):
+def obtener_venta(venta_id: int, user=Depends(get_current_user)):
+    wid = user["workspace_id"]
     with get_db() as conn:
         cursor = conn.cursor()
         r = cursor.execute("""
@@ -450,9 +478,9 @@ def obtener_venta(venta_id: int):
                    MAX(a.fecha_abono) as ultimo_abono_fecha
             FROM ventas v
             LEFT JOIN abonos a ON v.id = a.venta_id
-            WHERE v.id = ?
+            WHERE v.id = ? AND v.workspace_id = ?
             GROUP BY v.id
-        """, (venta_id,)).fetchone()
+        """, (venta_id, wid)).fetchone()
 
         if not r:
             raise HTTPException(status_code=404, detail="Venta no encontrada")
@@ -491,10 +519,11 @@ def obtener_venta(venta_id: int):
         return venta_obj
 
 @app.delete("/api/ventas/{venta_id}")
-def eliminar_venta(venta_id: int):
+def eliminar_venta(venta_id: int, user=Depends(get_current_user)):
+    wid = user["workspace_id"]
     with get_db() as conn:
         cursor = conn.cursor()
-        v = cursor.execute("SELECT id FROM ventas WHERE id = ?", (venta_id,)).fetchone()
+        v = cursor.execute("SELECT id FROM ventas WHERE id = ? AND workspace_id = ?", (venta_id, wid)).fetchone()
         if not v:
             raise HTTPException(status_code=404, detail="Venta no encontrada")
         cursor.execute("DELETE FROM ventas WHERE id = ?", (venta_id,))
@@ -503,12 +532,13 @@ def eliminar_venta(venta_id: int):
 # --- ABONOS ---
 
 @app.post("/api/ventas/{venta_id}/abonos")
-def registrar_abono(venta_id: int, abono: AbonoCreate):
+def registrar_abono(venta_id: int, abono: AbonoCreate, user=Depends(get_current_user)):
+    wid = user["workspace_id"]
     fecha = abono.fecha_abono or date.today().strftime("%Y-%m-%d")
     
     with get_db() as conn:
         cursor = conn.cursor()
-        v = cursor.execute("SELECT * FROM ventas WHERE id = ?", (venta_id,)).fetchone()
+        v = cursor.execute("SELECT * FROM ventas WHERE id = ? AND workspace_id = ?", (venta_id, wid)).fetchone()
         if not v:
             raise HTTPException(status_code=404, detail="Venta no encontrada")
 
@@ -567,10 +597,11 @@ def registrar_abono(venta_id: int, abono: AbonoCreate):
         }
 
 @app.delete("/api/abonos/{abono_id}")
-def eliminar_abono(abono_id: int):
+def eliminar_abono(abono_id: int, user=Depends(get_current_user)):
+    wid = user["workspace_id"]
     with get_db() as conn:
         cursor = conn.cursor()
-        ab = cursor.execute("SELECT venta_id FROM abonos WHERE id = ?", (abono_id,)).fetchone()
+        ab = cursor.execute("SELECT a.venta_id FROM abonos a JOIN ventas v ON v.id = a.venta_id WHERE a.id = ? AND v.workspace_id = ?", (abono_id, wid)).fetchone()
         if not ab:
             raise HTTPException(status_code=404, detail="Abono no encontrado")
         
@@ -589,10 +620,11 @@ def eliminar_abono(abono_id: int):
 # --- PRODUCTOS / INVENTARIO ---
 
 @app.get("/api/productos")
-def listar_productos():
+def listar_productos(user=Depends(get_current_user)):
+    wid = user["workspace_id"]
     with get_db() as conn:
-        filas = conn.execute("SELECT * FROM productos ORDER BY nombre ASC").fetchall()
-        tasa = get_current_rate()
+        filas = conn.execute("SELECT * FROM productos WHERE workspace_id = ? ORDER BY nombre ASC", (wid,)).fetchall()
+        tasa = get_current_rate(wid)
         prods = []
         for r in filas:
             p = dict(r)
@@ -604,8 +636,9 @@ def listar_productos():
         return prods
 
 @app.get("/api/articulos-vendidos")
-def obtener_articulos_vendidos():
-    tasa = get_current_rate()
+def obtener_articulos_vendidos(user=Depends(get_current_user)):
+    wid = user["workspace_id"]
+    tasa = get_current_rate(wid)
     with get_db() as conn:
         cursor = conn.cursor()
         filas = cursor.execute("""
@@ -626,9 +659,9 @@ def obtener_articulos_vendidos():
             FROM venta_items vi
             JOIN ventas v ON vi.venta_id = v.id
             LEFT JOIN productos p ON vi.producto_id = p.id
-            WHERE v.estado != 'anulada'
+            WHERE v.workspace_id = ? AND v.estado != 'anulada'
             ORDER BY v.fecha_venta DESC, vi.id DESC
-        """).fetchall()
+        """, (wid,)).fetchall()
 
         items = []
         categoria_stats = {}
@@ -704,13 +737,15 @@ def obtener_articulos_vendidos():
         }
 
 @app.post("/api/productos")
-def crear_producto(p: ProductoCreate):
+def crear_producto(p: ProductoCreate, user=Depends(get_current_user)):
+    wid = user["workspace_id"]
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            INSERT INTO productos (nombre, descripcion, detalles_incluye, foto_url, costo_usd, precio_sugerido_gtq, stock, categoria)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO productos (workspace_id, nombre, descripcion, detalles_incluye, foto_url, costo_usd, precio_sugerido_gtq, stock, categoria)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
+            wid,
             p.nombre.strip(),
             p.descripcion.strip(),
             p.detalles_incluye.strip() if p.detalles_incluye else "",
@@ -723,13 +758,14 @@ def crear_producto(p: ProductoCreate):
         return {"ok": True, "id": cursor.lastrowid, "mensaje": "Producto guardado"}
 
 @app.put("/api/productos/{producto_id}")
-def actualizar_producto(producto_id: int, p: ProductoCreate):
+def actualizar_producto(producto_id: int, p: ProductoCreate, user=Depends(get_current_user)):
+    wid = user["workspace_id"]
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute("""
             UPDATE productos 
             SET nombre = ?, descripcion = ?, detalles_incluye = ?, foto_url = ?, costo_usd = ?, precio_sugerido_gtq = ?, stock = ?, categoria = ?
-            WHERE id = ?
+            WHERE id = ? AND workspace_id = ?
         """, (
             p.nombre.strip(),
             p.descripcion.strip(),
@@ -739,41 +775,44 @@ def actualizar_producto(producto_id: int, p: ProductoCreate):
             p.precio_sugerido_gtq,
             p.stock,
             p.categoria.strip(),
-            producto_id
+            producto_id,
+            wid
         ))
         return {"ok": True, "mensaje": "Producto actualizado"}
 
 @app.delete("/api/productos/{producto_id}")
-def eliminar_producto(producto_id: int):
+def eliminar_producto(producto_id: int, user=Depends(get_current_user)):
     with get_db() as conn:
-        conn.execute("DELETE FROM productos WHERE id = ?", (producto_id,))
+        conn.execute("DELETE FROM productos WHERE id = ? AND workspace_id = ?", (producto_id, user["workspace_id"]))
     return {"ok": True, "mensaje": "Producto eliminado"}
 
 # --- CONFIGURACIÓN ---
 
 @app.get("/api/configuracion")
-def obtener_config():
-    tasa = get_current_rate()
+def obtener_config(user=Depends(get_current_user)):
+    wid = user["workspace_id"]
+    tasa = get_current_rate(wid)
     with get_db() as conn:
         cursor = conn.cursor()
-        rows = cursor.execute("SELECT clave, valor FROM configuracion").fetchall()
+        rows = cursor.execute("SELECT clave, valor FROM configuracion WHERE workspace_id = ?", (wid,)).fetchall()
         cfg = {r["clave"]: r["valor"] for r in rows}
         cfg["tasa_cambio"] = tasa
         return cfg
 
 @app.post("/api/configuracion")
-def actualizar_config(cfg: ConfigUpdate):
+def actualizar_config(cfg: ConfigUpdate, user=Depends(get_current_user)):
+    wid = user["workspace_id"]
     with get_db() as conn:
         if cfg.tasa_cambio is not None and cfg.tasa_cambio > 0:
-            set_manual_rate(cfg.tasa_cambio)
+            set_manual_rate(wid, cfg.tasa_cambio)
         if cfg.dias_alerta_atraso is not None and cfg.dias_alerta_atraso > 0:
-            conn.execute("INSERT OR REPLACE INTO configuracion (clave, valor) VALUES ('dias_alerta_atraso', ?)", (str(cfg.dias_alerta_atraso),))
+            conn.execute("INSERT OR REPLACE INTO configuracion (workspace_id, clave, valor) VALUES (?, 'dias_alerta_atraso', ?)", (wid, str(cfg.dias_alerta_atraso)))
         if cfg.nombre_negocio is not None:
-            conn.execute("INSERT OR REPLACE INTO configuracion (clave, valor) VALUES ('nombre_negocio', ?)", (cfg.nombre_negocio.strip(),))
+            conn.execute("INSERT OR REPLACE INTO configuracion (workspace_id, clave, valor) VALUES (?, 'nombre_negocio', ?)", (wid, cfg.nombre_negocio.strip()))
         if cfg.socio_1 is not None and cfg.socio_1.strip():
-            conn.execute("INSERT OR REPLACE INTO configuracion (clave, valor) VALUES ('socio_1', ?)", (cfg.socio_1.strip(),))
+            conn.execute("INSERT OR REPLACE INTO configuracion (workspace_id, clave, valor) VALUES (?, 'socio_1', ?)", (wid, cfg.socio_1.strip()))
         if cfg.socio_2 is not None and cfg.socio_2.strip():
-            conn.execute("INSERT OR REPLACE INTO configuracion (clave, valor) VALUES ('socio_2', ?)", (cfg.socio_2.strip(),))
+            conn.execute("INSERT OR REPLACE INTO configuracion (workspace_id, clave, valor) VALUES (?, 'socio_2', ?)", (wid, cfg.socio_2.strip()))
     return {"ok": True, "mensaje": "Configuración guardada"}
 
 # --- SERVIR FRONTEND ---
@@ -781,6 +820,10 @@ FRONTEND_DIR = os.path.join(BASE_DIR, "frontend")
 
 if os.path.exists(FRONTEND_DIR):
     app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
 
 @app.get("/")
 def serve_index():

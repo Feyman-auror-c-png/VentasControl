@@ -137,12 +137,26 @@ El script creará automáticamente el entorno virtual si no existe, instalará l
 
 ## 🔐 Credenciales de Acceso
 
-Al ingresar por primera vez a la pantalla de Login, utiliza las siguientes credenciales predeterminadas:
+La aplicación no incluye credenciales predeterminadas. Crea cada usuario desde el
+contenedor y asígnalo a un espacio de trabajo:
 
-* **Usuario:** `admin`
-* **Contraseña:** `1234`
+```bash
+docker compose exec ventascontrol python -m backend.manage_users \
+  --username usuario --password 'contraseña-segura' \
+  --name 'Nombre visible' --workspace 'Nombre del espacio'
+```
 
-> 💡 **Recomendación:** Una vez iniciada la sesión, ingresa al botón **Ajustes** en la esquina superior derecha y actualiza tu contraseña por una personalizada y segura.
+Los usuarios del mismo espacio comparten ventas, inventario, abonos y
+configuración. Los usuarios de espacios diferentes mantienen sus datos aislados.
+
+### Despliegue con Docker
+
+```bash
+docker compose up -d --build
+curl http://127.0.0.1:8091/health
+```
+
+La base de datos y las fotos se guardan de forma persistente en `./data/`.
 
 ---
 
