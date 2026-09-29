@@ -1,0 +1,895 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Control de Ventas & Fiados - v1.1.1</title>
+  <link rel="stylesheet" href="/static/style.css?v=1.1.1">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+</head>
+<body>
+
+  <!-- TOAST NOTIFICATIONS CONTAINER -->
+  <div id="toastContainer" class="toast-container"></div>
+
+  <!-- PANTALLA DE LOGIN -->
+  <div id="loginScreen" class="login-wrapper">
+    <div class="login-card">
+      <div class="login-logo-box">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+          <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+        </svg>
+      </div>
+      <h2>Control de Ventas <span class="version-badge">v1.1.1</span></h2>
+      <p class="login-sub">Sistema de administración de créditos y cobranzas</p>
+      
+      <form id="formLogin" onsubmit="realizarLogin(event)">
+        <div class="form-group">
+          <label for="loginUser">Usuario</label>
+          <input type="text" id="loginUser" required placeholder="admin" value="admin">
+        </div>
+        <div class="form-group">
+          <label for="loginPass">Contraseña</label>
+          <input type="password" id="loginPass" required placeholder="••••">
+        </div>
+        <div class="form-group" style="text-align: left; margin: 10px 0 15px 0;">
+          <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 0.88rem; color: var(--text-secondary);">
+            <input type="checkbox" id="loginRemember" checked style="accent-color: var(--primary); width:16px; height:16px;">
+            Recordar sesión en este equipo
+          </label>
+        </div>
+        <div id="loginError" class="login-error hidden"></div>
+        <button type="submit" class="btn btn-primary full-width" style="padding: 0.8rem;">
+          Ingresar al Sistema
+        </button>
+      </form>
+      <div style="margin-top: 1.25rem; font-size: 0.75rem; color: var(--text-muted); font-weight: 600;">
+        Sistema de Ventas &bull; Versión <strong>v1.1.1</strong>
+      </div>
+    </div>
+  </div>
+
+  <!-- APLICACIÓN PRINCIPAL -->
+  <div id="appScreen" class="app-container hidden">
+    
+    <!-- HEADER -->
+    <header class="main-header">
+      <div class="header-brand">
+        <div class="logo-badge">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="16.5" y1="9.4" x2="7.5" y2="4.21"></line>
+            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+            <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+            <line x1="12" y1="22.08" x2="12" y2="12"></line>
+          </svg>
+        </div>
+        <div>
+          <h1>Control de Ventas & Fiados <span class="version-badge">v1.1.1</span></h1>
+          <p class="subtitle">Gestión de créditos, cobros mensuales y catálogo de importación</p>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <!-- Tasa de Cambio -->
+        <div class="rate-badge" id="rateBadge" title="Clic para ajustar el tipo de cambio oficial">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="1" x2="12" y2="23"></line>
+            <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+          </svg>
+          <span>$1 USD = <strong id="tasaValor">Q7.80</strong></span>
+        </div>
+
+        <!-- Botón Tema Claro / Oscuro -->
+        <button id="themeToggleBtn" class="theme-toggle-btn" onclick="alternarTema()" title="Cambiar tema">
+          <span id="themeToggleIcon">🌙</span>
+          <span id="themeToggleText">Oscuro</span>
+        </button>
+
+        <!-- Nueva Venta -->
+        <button class="btn btn-primary" onclick="abrirModalNuevaVenta()">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+          <span>Nueva Venta</span>
+        </button>
+
+        <!-- Ajustes -->
+        <button class="btn btn-outline btn-sm" onclick="abrirModalAjustes()" title="Ajustes y Respaldo">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+          </svg>
+          Ajustes
+        </button>
+
+        <!-- Salir -->
+        <button class="btn btn-danger-outline btn-sm" onclick="cerrarSesion()" title="Cerrar Sesión">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+            <polyline points="16 17 21 12 16 7"></polyline>
+            <line x1="21" y1="12" x2="9" y2="12"></line>
+          </svg>
+          Salir
+        </button>
+      </div>
+    </header>
+
+    <!-- METRICS CARDS -->
+    <section class="metrics-grid">
+      <!-- Por Cobrar -->
+      <div class="metric-card accent-amber">
+        <div class="metric-info">
+          <span class="metric-title">Por Cobrar</span>
+          <span class="metric-value" id="metricaPorCobrar">Q0.00</span>
+        </div>
+        <div class="metric-icon-wrap">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"></circle>
+            <polyline points="12 6 12 12 16 14"></polyline>
+          </svg>
+        </div>
+      </div>
+
+      <!-- Ya Cobrado -->
+      <div class="metric-card accent-green">
+        <div class="metric-info">
+          <span class="metric-title">Total Ya Cobrado</span>
+          <span class="metric-value" id="metricaCobrado">Q0.00</span>
+        </div>
+        <div class="metric-icon-wrap">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2" y="4" width="20" height="16" rx="2"></rect>
+            <line x1="2" y1="10" x2="22" y2="10"></line>
+          </svg>
+        </div>
+      </div>
+
+      <!-- Ganancia Neta -->
+      <div class="metric-card accent-purple">
+        <div class="metric-info">
+          <span class="metric-title">Ganancia Neta Estimada</span>
+          <span class="metric-value" id="metricaGanancia">Q0.00</span>
+        </div>
+        <div class="metric-icon-wrap">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline>
+            <polyline points="17 6 23 6 23 12"></polyline>
+          </svg>
+        </div>
+      </div>
+
+      <!-- Créditos Activos -->
+      <div class="metric-card accent-indigo">
+        <div class="metric-info">
+          <span class="metric-title">Créditos Activos</span>
+          <div class="metric-subline">
+            <span class="metric-value" id="metricaActivos">0</span>
+            <span class="badge-alert hidden" id="badgeAtrasados">0 atrasados</span>
+          </div>
+        </div>
+        <div class="metric-icon-wrap">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+            <circle cx="9" cy="7" r="4"></circle>
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+            <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+          </svg>
+        </div>
+      </div>
+    </section>
+
+    <!-- NAVIGATION TABS -->
+    <nav class="nav-tabs-wrapper">
+      <button class="tab-btn active" data-tab="tab-activas" onclick="cambiarTab('tab-activas')">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect>
+          <line x1="1" y1="10" x2="23" y2="10"></line>
+        </svg>
+        <span>Fiados Activos</span>
+        <span class="tab-counter" id="countActivas">0</span>
+      </button>
+
+      <button class="tab-btn" data-tab="tab-productos" onclick="cambiarTab('tab-productos')">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+        </svg>
+        <span>Inventario Disponible</span>
+        <span class="tab-counter" id="countProductos">0</span>
+      </button>
+
+      <button class="tab-btn" data-tab="tab-vendidos" onclick="cambiarTab('tab-vendidos')">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline>
+          <polyline points="17 6 23 6 23 12"></polyline>
+        </svg>
+        <span>Artículos Vendidos & Estadísticas</span>
+        <span class="tab-counter" id="countVendidos">0</span>
+      </button>
+
+      <button class="tab-btn" data-tab="tab-completadas" onclick="cambiarTab('tab-completadas')">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+          <polyline points="22 4 12 14.01 9 11.01"></polyline>
+        </svg>
+        <span>Historial Pagados</span>
+        <span class="tab-counter" id="countCompletadas">0</span>
+      </button>
+    </nav>
+
+    <!-- CONTENIDO TABS -->
+    <main class="main-content">
+      
+      <!-- TAB 1: FIADOS ACTIVOS -->
+      <section id="tab-activas" class="tab-pane active">
+        <div class="toolbar">
+          <div class="search-box">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+            <input type="text" id="busquedaInput" placeholder="Buscar por cliente, teléfono, artículo o nota..." oninput="filtrarVentas()">
+          </div>
+          <label class="filter-chip">
+            <input type="checkbox" id="filtroSoloAtrasados" onchange="filtrarVentas()">
+            <span>Mostrar solo atrasados de este mes</span>
+          </label>
+        </div>
+
+        <div id="listaVentasActivas" class="ventas-grid"></div>
+        
+        <div id="emptyVentas" class="empty-state hidden">
+          <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🎉</div>
+          <h3>No hay créditos pendientes por cobrar</h3>
+          <p>Todos los pagos están al día o puedes registrar una nueva venta con el botón superior.</p>
+        </div>
+      </section>
+
+      <!-- TAB 2: INVENTARIO / PRODUCTOS DISPONIBLES -->
+      <section id="tab-productos" class="tab-pane">
+        <div class="toolbar">
+          <div class="search-box">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+            <input type="text" id="busquedaProdInput" placeholder="Buscar artículo disponible, serie o categoría..." oninput="filtrarProductos()">
+          </div>
+
+          <label class="filter-chip" title="Los artículos con 0 unidades se mueven a Vendidos">
+            <input type="checkbox" id="filtroMostrarAgotados" onchange="filtrarProductos()">
+            <span>Ver artículos agotados</span>
+          </label>
+
+          <button class="btn btn-primary" onclick="abrirModalProducto()">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+            <span>Agregar Artículo al Inventario</span>
+          </button>
+        </div>
+        
+        <div class="table-container">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Foto(s)</th>
+                <th>Artículo & Qué incluye</th>
+                <th>Categoría</th>
+                <th>Costo (USD)</th>
+                <th>Costo (GTQ)</th>
+                <th>Precio Venta</th>
+                <th>Tu Ganancia</th>
+                <th>Stock</th>
+                <th style="text-align: right;">Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="tablaProductosBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- TAB 3: ARTÍCULOS VENDIDOS & ESTADÍSTICAS -->
+      <section id="tab-vendidos" class="tab-pane">
+        <!-- Tarjetas de Estadísticas de Ventas -->
+        <div class="metrics-grid" style="margin-bottom: 1.5rem;">
+          <div class="metric-card accent-green">
+            <div class="metric-info">
+              <span class="metric-title">Unidades Vendidas</span>
+              <span class="metric-value" id="statTotalVendidas">0</span>
+            </div>
+            <div class="metric-icon-wrap">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path><line x1="3" y1="6" x2="21" y2="6"></line><path d="M16 10a4 4 0 0 1-8 0"></path></svg>
+            </div>
+          </div>
+
+          <div class="metric-card accent-indigo">
+            <div class="metric-info">
+              <span class="metric-title">Categoría Top #1</span>
+              <span class="metric-value" id="statCategoriaTop" style="font-size: 1.25rem;">N/A</span>
+            </div>
+            <div class="metric-icon-wrap">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="7"></circle><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline></svg>
+            </div>
+          </div>
+
+          <div class="metric-card accent-amber">
+            <div class="metric-info">
+              <span class="metric-title">Ingresos Generados</span>
+              <span class="metric-value" id="statTotalIngresos">Q0.00</span>
+            </div>
+            <div class="metric-icon-wrap">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+            </div>
+          </div>
+
+          <div class="metric-card accent-purple">
+            <div class="metric-info">
+              <span class="metric-title">Ganancia Neta en Ventas</span>
+              <span class="metric-value" id="statTotalGanancia">Q0.00</span>
+            </div>
+            <div class="metric-icon-wrap">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline><polyline points="17 6 23 6 23 12"></polyline></svg>
+            </div>
+          </div>
+        </div>
+
+        <!-- Desglose de Ventas por Categoría -->
+        <div style="background: var(--bg-card); border: 1px solid var(--border-card); border-radius: var(--radius-lg); padding: 1.25rem; margin-bottom: 1.5rem; box-shadow: var(--shadow-sm);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+            <h3 style="font-size: 0.95rem; font-weight: 700; color: var(--text-main); display: flex; align-items: center; gap: 0.5rem;">
+              <span>📊 Desempeño por Categoría (Qué se ha vendido más)</span>
+            </h3>
+            <span style="font-size: 0.8rem; color: var(--text-muted);">Ranking por unidades</span>
+          </div>
+          <div id="contenedorStatsCategorias" style="display: flex; flex-direction: column; gap: 0.85rem;"></div>
+        </div>
+
+        <!-- Toolbar de Filtros para Artículos Vendidos -->
+        <div class="toolbar">
+          <div class="search-box">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+            <input type="text" id="busquedaVendidosInput" placeholder="Buscar por artículo vendido, comprador o categoría..." oninput="filtrarVendidos()">
+          </div>
+          <select id="filtroCategoriaVendidos" onchange="filtrarVendidos()" style="max-width: 240px; padding: 0.6rem 0.85rem; border-radius: var(--radius-md); border: 1px solid var(--border-card); background: var(--bg-card); color: var(--text-main); font-weight: 600; cursor: pointer;">
+            <option value="">Todas las Categorías</option>
+          </select>
+        </div>
+
+        <!-- Tabla de Artículos Vendidos -->
+        <div class="table-container">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Foto</th>
+                <th>Artículo Vendido</th>
+                <th>Categoría</th>
+                <th>Comprador</th>
+                <th>Fecha Venta</th>
+                <th>Cant.</th>
+                <th>Precio Venta</th>
+                <th>Ganancia Estimada</th>
+                <th>Estado Venta</th>
+              </tr>
+            </thead>
+            <tbody id="tablaVendidosBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- TAB 4: HISTORIAL PAGADOS -->
+      <section id="tab-completadas" class="tab-pane">
+        <div class="toolbar">
+          <h3 style="font-size: 1.15rem; font-weight: 700; color: var(--text-main);">Ventas Pagadas al 100% (Créditos Liquidados)</h3>
+        </div>
+        <div id="listaVentasCompletadas" class="ventas-grid"></div>
+      </section>
+
+      <!-- FOOTER DEL SISTEMA -->
+      <footer style="margin-top: 3.5rem; padding: 1.5rem 0.5rem; border-top: 1px solid var(--border-subtle); display: flex; justify-content: space-between; align-items: center; font-size: 0.82rem; color: var(--text-muted); flex-wrap: wrap; gap: 0.75rem;">
+        <div style="display: flex; align-items: center; gap: 0.5rem;">
+          <strong style="color: var(--text-main);">Control de Ventas & Fiados</strong>
+          <span>&bull;</span>
+          <span>Gestión de Importación y Cobranzas</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 0.4rem;">
+          <span>Versión del Sistema:</span>
+          <span class="version-badge">v1.1.1</span>
+        </div>
+      </footer>
+
+    </main>
+  </div>
+
+  <!-- MODAL: AGREGAR / EDITAR PRODUCTO (CON SELECT ELEGANTE Y SUBIDA MÚLTIPLE DE FOTOS) -->
+  <dialog id="modalProducto" class="modal">
+    <div class="modal-box large">
+      <div class="modal-header">
+        <h3 id="modalProductoTitulo">Nuevo Artículo en Inventario</h3>
+        <button class="btn-close" onclick="cerrarModal('modalProducto')">✕</button>
+      </div>
+      <form id="formProducto" onsubmit="guardarProducto(event)">
+        <input type="hidden" id="prodId">
+        <input type="hidden" id="prodFotoUrl">
+        
+        <div class="form-row">
+          <div class="form-group flex-2">
+            <label for="prodNombre">Nombre del producto *</label>
+            <input type="text" id="prodNombre" required placeholder="Ej: Xbox One Series S 512GB Blanco">
+          </div>
+          <div class="form-group flex-1">
+            <label>Categoría *</label>
+            <!-- SELECT ELEGANTE PERSONALIZADO (NO UGLY OS SELECT) -->
+            <div class="custom-select-wrapper" id="catDropdownWrapper">
+              <input type="hidden" id="prodCategoria" value="Consolas & Videojuegos">
+              <button type="button" class="custom-select-trigger" onclick="toggleCustomSelect('catDropdownMenu')">
+                <span id="catSelectedDisplay">🎮 Consolas & Videojuegos</span>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+              </button>
+              <div class="custom-select-menu hidden" id="catDropdownMenu">
+                <div class="custom-select-option selected" data-value="Consolas & Videojuegos" onclick="selectCustomOption(this, 'prodCategoria', 'catSelectedDisplay', 'catDropdownMenu')">
+                  <span>🎮 Consolas & Videojuegos</span>
+                </div>
+                <div class="custom-select-option" data-value="Celulares & Tablets" onclick="selectCustomOption(this, 'prodCategoria', 'catSelectedDisplay', 'catDropdownMenu')">
+                  <span>📱 Celulares & Tablets</span>
+                </div>
+                <div class="custom-select-option" data-value="Laptops & Computación" onclick="selectCustomOption(this, 'prodCategoria', 'catSelectedDisplay', 'catDropdownMenu')">
+                  <span>💻 Laptops & Computación</span>
+                </div>
+                <div class="custom-select-option" data-value="Audio & Gadgets" onclick="selectCustomOption(this, 'prodCategoria', 'catSelectedDisplay', 'catDropdownMenu')">
+                  <span>🎧 Audio & Gadgets</span>
+                </div>
+                <div class="custom-select-option" data-value="Televisores & Pantallas" onclick="selectCustomOption(this, 'prodCategoria', 'catSelectedDisplay', 'catDropdownMenu')">
+                  <span>📺 Televisores & Pantallas</span>
+                </div>
+                <div class="custom-select-option" data-value="Calzado, Ropa & Accesorios" onclick="selectCustomOption(this, 'prodCategoria', 'catSelectedDisplay', 'catDropdownMenu')">
+                  <span>👟 Calzado, Ropa & Accesorios</span>
+                </div>
+                <div class="custom-select-option" data-value="Herramientas & Equipos" onclick="selectCustomOption(this, 'prodCategoria', 'catSelectedDisplay', 'catDropdownMenu')">
+                  <span>🛠️ Herramientas & Equipos</span>
+                </div>
+                <div class="custom-select-option" data-value="Otro / General" onclick="selectCustomOption(this, 'prodCategoria', 'catSelectedDisplay', 'catDropdownMenu')">
+                  <span>📦 Otro / General</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="prodDetallesIncluye">¿Qué incluye / No. de Serie / Estado físico / Accesorios? *</label>
+          <textarea id="prodDetallesIncluye" rows="2" placeholder="Ej: Trae caja original, cable HDMI, cable de poder, control blanco original con desgaste leve. No. Serie: 18273645."></textarea>
+        </div>
+
+        <!-- DROPZONE FOTOS MÚLTIPLES ARTÍCULO -->
+        <div class="form-group">
+          <label>Fotos del artículo (Puedes seleccionar varias)</label>
+          <div class="custom-file-upload" onclick="document.getElementById('prodFotoFile').click()">
+            <div id="prodUploadPlaceholder" class="upload-placeholder">
+              <div class="upload-icon-wrap">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+                  <circle cx="12" cy="13" r="4"></circle>
+                </svg>
+              </div>
+              <div>
+                <strong>Toca aquí para tomar fotos o elegir imágenes</strong>
+                <p>Puedes elegir 1 o varias imágenes a la vez (caja, artículo, serie, accesorios)</p>
+              </div>
+            </div>
+          </div>
+          <input type="file" id="prodFotoFile" accept="image/*" multiple class="hidden" onchange="manejarFotosMultiples(this)">
+          <!-- Grid con vista previa de todas las fotos seleccionadas -->
+          <div id="prodFotosGrid" class="multi-preview-grid"></div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group flex-1">
+            <label for="prodCostoUsd">Costo en USA ($ USD)</label>
+            <div class="input-prefix-wrapper">
+              <span class="prefix">$</span>
+              <input type="number" step="0.01" min="0" id="prodCostoUsd" required placeholder="Ej: 220.00" oninput="calcularMargenProductoModal()">
+            </div>
+          </div>
+          <div class="form-group flex-1">
+            <label for="prodPrecioGtq">Precio sugerido (GTQ)</label>
+            <div class="input-prefix-wrapper">
+              <span class="prefix">Q</span>
+              <input type="number" step="0.01" min="0" id="prodPrecioGtq" required placeholder="Ej: 2800.00" oninput="calcularMargenProductoModal()">
+            </div>
+          </div>
+          <div class="form-group flex-1">
+            <label for="prodStock">Cantidad (Stock)</label>
+            <input type="number" min="0" id="prodStock" value="1">
+          </div>
+        </div>
+
+        <div class="preview-ganancia-box" id="previewProdGananciaBox">
+          <span>Margen de ganancia calculado:</span>
+          <strong id="previewProdGanancia">Q0.00</strong>
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn btn-outline" onclick="cerrarModal('modalProducto')">Cancelar</button>
+          <button type="submit" class="btn btn-primary" id="btnGuardarProd">Guardar Artículo</button>
+        </div>
+      </form>
+    </div>
+  </dialog>
+
+  <!-- MODAL: NUEVA VENTA / CRÉDITO -->
+  <dialog id="modalNuevaVenta" class="modal">
+    <div class="modal-box large">
+      <div class="modal-header">
+        <h3>Registrar Venta / Crédito a una Persona</h3>
+        <button class="btn-close" onclick="cerrarModal('modalNuevaVenta')">✕</button>
+      </div>
+      <form id="formNuevaVenta" onsubmit="guardarNuevaVenta(event)">
+        
+        <!-- DATOS DEL CLIENTE -->
+        <div class="form-section-title">1. ¿A quién se lo vas a vender?</div>
+        <div class="form-row">
+          <div class="form-group flex-1">
+            <label for="ventaCliente">Nombre completo *</label>
+            <input type="text" id="ventaCliente" required placeholder="Ej: Carlos Mendoza">
+          </div>
+          <div class="form-group flex-1">
+            <label for="ventaTelefono">Número de WhatsApp (8 dígitos)</label>
+            <input type="tel" id="ventaTelefono" placeholder="Ej: 55443322">
+          </div>
+        </div>
+
+        <!-- SELECCIÓN DEL ARTÍCULO DEL INVENTARIO -->
+        <div class="form-section-title">2. Selecciona el artículo del inventario</div>
+        <div class="form-group">
+          <label for="selectProducto">Elegir artículo ya guardado:</label>
+          <select id="selectProducto" onchange="seleccionarProductoInventario(this.value)">
+            <option value="">-- Elige un artículo del catálogo --</option>
+          </select>
+        </div>
+
+        <!-- VISTA PREVIA DEL PRODUCTO SELECCIONADO -->
+        <div id="ventaArticuloPreviewBox" class="producto-seleccionado-card hidden">
+          <img id="ventaPreviewImg" src="" alt="Artículo" class="preview-img">
+          <div class="preview-texts">
+            <h4 id="ventaPreviewTitulo">Artículo</h4>
+            <p id="ventaPreviewIncluye" style="font-size: 0.8rem; color: var(--text-muted);"></p>
+            <span id="ventaPreviewCosto" class="category-tag" style="margin-top: 4px;"></span>
+          </div>
+        </div>
+
+        <div id="ventaManualInputs" class="form-row">
+          <div class="form-group flex-2">
+            <label for="ventaItemDesc">Descripción del producto *</label>
+            <input type="text" id="ventaItemDesc" placeholder="Ej: Xbox Series S 512GB">
+          </div>
+          <div class="form-group flex-1">
+            <label for="ventaItemCostoUsd">Costo USA ($ USD)</label>
+            <div class="input-prefix-wrapper">
+              <span class="prefix">$</span>
+              <input type="number" step="0.01" min="0" id="ventaItemCostoUsd" value="0" oninput="calcularMargenNuevaVenta()">
+            </div>
+          </div>
+        </div>
+
+        <!-- CONDICIONES DE PAGO Y FECHA MENSUAL -->
+        <div class="form-section-title">3. Condiciones del Crédito y Fechas de Pago</div>
+        <div class="form-row">
+          <div class="form-group flex-1">
+            <label for="ventaTotal">Precio Acordado (GTQ) *</label>
+            <div class="input-prefix-wrapper">
+              <span class="prefix">Q</span>
+              <input type="number" step="0.01" min="1" id="ventaTotal" required placeholder="Ej: 2800.00" oninput="calcularMargenNuevaVenta()">
+            </div>
+          </div>
+          <div class="form-group flex-1">
+            <label for="ventaEnganche">Enganche inicial recibido</label>
+            <div class="input-prefix-wrapper">
+              <span class="prefix">Q</span>
+              <input type="number" step="0.01" min="0" id="ventaEnganche" value="0">
+            </div>
+          </div>
+          <div class="form-group flex-1">
+            <label for="ventaDiaPago">Día de pago cada mes *</label>
+            <input type="number" min="1" max="31" id="ventaDiaPago" value="15" required placeholder="Ej: 15">
+          </div>
+        </div>
+
+        <div class="preview-ganancia-box">
+          <span>Margen de ganancia estimado:</span>
+          <strong id="previewGananciaValor">Q0.00</strong>
+        </div>
+
+        <div class="form-group">
+          <label for="ventaNotas">Notas internas</label>
+          <input type="text" id="ventaNotas" placeholder="Ej: Amigo del trabajo / Entregado en zona 10">
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn btn-outline" onclick="cerrarModal('modalNuevaVenta')">Cancelar</button>
+          <button type="submit" class="btn btn-primary" id="btnGuardarVenta">Guardar Venta</button>
+        </div>
+      </form>
+    </div>
+  </dialog>
+
+  <!-- MODAL: REGISTRAR ABONO -->
+  <dialog id="modalAbono" class="modal">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3 id="modalAbonoTitulo">Registrar Abono</h3>
+        <button class="btn-close" onclick="cerrarModal('modalAbono')">✕</button>
+      </div>
+      <form id="formAbono" onsubmit="guardarAbono(event)">
+        <input type="hidden" id="abonoVentaId">
+        <div class="saldo-resumen-box">
+          <div>
+            <span class="label">Total Venta</span>
+            <strong id="abonoVentaTotal" class="text-blue">Q0.00</strong>
+          </div>
+          <div>
+            <span class="label">Ya Abonado</span>
+            <span id="abonoVentaAbonado" class="text-green">Q0.00</span>
+          </div>
+          <div>
+            <span class="label">Saldo Pendiente</span>
+            <strong id="abonoVentaSaldo" class="text-orange">Q0.00</strong>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group flex-1">
+            <label for="abonoMonto">Monto a abonar hoy (GTQ) *</label>
+            <div class="input-prefix-wrapper">
+              <span class="prefix">Q</span>
+              <input type="number" step="0.01" min="1" id="abonoMonto" required placeholder="Ej: 300.00" autofocus>
+            </div>
+          </div>
+          <div class="form-group flex-1">
+            <label for="abonoFecha">Fecha del abono</label>
+            <input type="date" id="abonoFecha">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="abonoMetodo">Forma de Pago</label>
+          <select id="abonoMetodo">
+            <option value="Efectivo">Efectivo</option>
+            <option value="Depósito BI">Depósito Banco Industrial</option>
+            <option value="Transferencia BI">Transferencia BI</option>
+            <option value="Depósito Banrural">Depósito Banrural</option>
+            <option value="Transferencia Banrural">Transferencia Banrural</option>
+            <option value="Banco G&T">Banco G&T Continental</option>
+            <option value="BAC Credomatic">BAC Credomatic</option>
+            <option value="Otro">Otro</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="abonoBoleta">No. Boleta / Transacción (Opcional)</label>
+          <input type="text" id="abonoBoleta" placeholder="Ej: 987654321">
+        </div>
+
+        <!-- DROPZONE FOTO BOLETA -->
+        <div class="form-group">
+          <label>Foto de Boleta / Comprobante (Opcional)</label>
+          <div class="custom-file-upload" onclick="document.getElementById('abonoFotoFile').click()">
+            <div id="abonoUploadPlaceholder" class="upload-placeholder">
+              <div class="upload-icon-wrap">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                  <polyline points="14 2 14 8 20 8"></polyline>
+                  <line x1="16" y1="13" x2="8" y2="13"></line>
+                  <line x1="16" y1="17" x2="8" y2="17"></line>
+                  <polyline points="10 9 9 9 8 9"></polyline>
+                </svg>
+              </div>
+              <div>
+                <strong>Toca para subir captura o foto de la boleta</strong>
+              </div>
+            </div>
+            <div id="abonoFotoPreview" class="upload-preview hidden"></div>
+          </div>
+          <input type="file" id="abonoFotoFile" accept="image/*" class="hidden" onchange="previewImage(this, 'abonoFotoPreview', 'abonoUploadPlaceholder')">
+        </div>
+
+        <div class="form-group">
+          <label for="abonoNota">Nota / Referencia interna</label>
+          <input type="text" id="abonoNota" placeholder="Ej: Me transfirió el hermano">
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn btn-outline" onclick="cerrarModal('modalAbono')">Cancelar</button>
+          <button type="submit" class="btn btn-success" id="btnGuardarAbono">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+            Confirmar Abono
+          </button>
+        </div>
+      </form>
+    </div>
+  </dialog>
+
+  <!-- MODAL: ÉXITO ABONO & WHATSAPP -->
+  <dialog id="modalAbonoExito" class="modal">
+    <div class="modal-box text-center" style="max-width: 440px; padding: 2rem;">
+      <div style="width: 56px; height: 56px; border-radius: 50%; background: var(--success-light); color: var(--success); display: inline-flex; align-items: center; justify-content: center; margin-bottom: 1rem;">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="20 6 9 17 4 12"></polyline>
+        </svg>
+      </div>
+      <h3>¡Abono Registrado!</h3>
+      <p id="modalExitoTexto" style="color: var(--text-muted); margin: 0.5rem 0 1.5rem 0;">Se actualizaron los saldos correctamente.</p>
+      
+      <div style="background: var(--bg-subtle); padding: 1.25rem; border-radius: var(--radius-lg); margin-bottom: 1.5rem;">
+        <p style="font-size: 0.9rem; margin-bottom: 0.85rem; font-weight: 600;">¿Deseas enviar el comprobante y saldo actualizado por WhatsApp?</p>
+        <a id="btnEnviarWaConfirmacion" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-whatsapp full-width">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.019 3.287l-.582 2.128 2.182-.573c.978.58 1.911.928 3.145.929 3.178 0 5.767-2.587 5.768-5.766.001-3.187-2.575-5.77-5.764-5.771zm3.392 8.244c-.144.405-.837.774-1.17.824-.299.045-.677.063-1.092-.069-.252-.08-.575-.187-.988-.365-1.739-.751-2.874-2.502-2.961-2.617-.087-.116-.708-.94-.708-1.793s.448-1.273.607-1.446c.159-.173.346-.217.462-.217l.332.006c.106.005.249-.04.39.298.144.347.491 1.2.534 1.287.043.087.072.188.014.304-.058.116-.087.188-.173.289l-.26.304c-.087.086-.177.18-.076.354.101.174.449.741.964 1.201.662.591 1.221.774 1.394.86s.275.072.376-.043c.101-.116.433-.506.549-.68.116-.173.231-.145.39-.087s1.011.477 1.184.564.289.13.332.202c.045.072.045.419-.1.824zm-3.423-10.416c-4.401 0-7.98 3.58-7.98 7.981 0 1.41.371 2.735 1.018 3.883l-1.046 3.824 3.931-1.031c1.109.605 2.379.945 3.73.945 4.402 0 7.98-3.58 7.98-7.982 0-4.402-3.578-7.98-7.98-7.98z"/>
+          </svg>
+          Enviar Confirmación por WhatsApp
+        </a>
+      </div>
+
+      <div class="modal-actions justify-center" style="margin-top: 0; padding-top: 0; border-top: none;">
+        <button type="button" class="btn btn-secondary" onclick="cerrarModal('modalAbonoExito')">Listo, cerrar</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- MODAL: DETALLE Y HISTORIAL DE ABONOS -->
+  <dialog id="modalDetalleVenta" class="modal">
+    <div class="modal-box large">
+      <div class="modal-header">
+        <h3 id="modalDetalleTitulo">Historial de Pagos</h3>
+        <button class="btn-close" onclick="cerrarModal('modalDetalleVenta')">✕</button>
+      </div>
+      <div class="modal-body">
+        <div id="detalleVentaInfo" style="margin-bottom: 1.5rem;"></div>
+        
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+          <h4 style="font-size: 1rem; font-weight: 700;">Abonos Registrados</h4>
+          <button class="btn btn-outline btn-sm" onclick="imprimirRecibo()">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="6 9 6 2 18 2 18 9"></polyline>
+              <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+              <rect x="6" y="14" width="12" height="8"></rect>
+            </svg>
+            Imprimir Recibo Formal
+          </button>
+        </div>
+
+        <div class="table-container">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Monto</th>
+                <th>Método / Boleta</th>
+                <th>Comprobante</th>
+                <th style="text-align: right;">Acción</th>
+              </tr>
+            </thead>
+            <tbody id="tablaHistorialAbonos"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- MODAL: VER FOTO AMPLIADA / GALERÍA -->
+  <dialog id="modalVerFoto" class="modal">
+    <div class="modal-box text-center" style="max-width: 650px;">
+      <div class="modal-header">
+        <h3 id="modalVerFotoTitulo">Foto del Artículo</h3>
+        <button class="btn-close" onclick="cerrarModal('modalVerFoto')">✕</button>
+      </div>
+      <div style="margin: 1.25rem 0;">
+        <img id="imgComprobanteFull" src="" alt="Foto" style="max-width:100%; max-height:65vh; border-radius:12px; object-fit:contain; box-shadow:var(--shadow-lg);">
+        <div id="galeriaThumbsContainer" class="multi-preview-grid" style="justify-content:center; max-width:400px; margin:0.85rem auto 0 auto;"></div>
+      </div>
+      <div class="modal-actions justify-center">
+        <a id="btnDescargarFoto" href="#" download class="btn btn-outline btn-sm">💾 Descargar Imagen</a>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- MODAL: CONFIRMACIÓN ELEGANTE (REEMPLAZA EL CONFIRM() DEL NAVEGADOR) -->
+  <dialog id="modalConfirmacion" class="modal">
+    <div class="modal-box text-center" style="max-width: 420px; padding: 2rem;">
+      <div style="width: 52px; height: 52px; border-radius: 50%; background: var(--danger-light); color: var(--danger); display: inline-flex; align-items: center; justify-content: center; margin-bottom: 1rem;">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="3 6 5 6 21 6"></polyline>
+          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+        </svg>
+      </div>
+      <h3 id="confirmacionTitulo">¿Estás seguro?</h3>
+      <p id="confirmacionMensaje" style="color: var(--text-muted); font-size: 0.9rem; margin: 0.5rem 0 1.5rem 0;">Esta acción no se puede deshacer.</p>
+      <div class="modal-actions justify-center" style="margin-top: 0; padding-top: 0; border-top: none; gap: 0.75rem;">
+        <button type="button" class="btn btn-outline" onclick="cerrarModal('modalConfirmacion')">Cancelar</button>
+        <button type="button" class="btn btn-danger-outline" id="btnConfirmarAccion">Sí, eliminar</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- MODAL: AJUSTES Y RESPALDO -->
+  <dialog id="modalAjustes" class="modal">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>Ajustes del Sistema</h3>
+        <button class="btn-close" onclick="cerrarModal('modalAjustes')">✕</button>
+      </div>
+
+      <div style="padding: 1.5rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; background: var(--bg-subtle); padding: 0.65rem 0.95rem; border-radius: var(--radius-md); margin-bottom: 1.25rem; border: 1px solid var(--border-subtle); font-size: 0.85rem;">
+          <span style="color: var(--text-muted); font-weight: 600;">Versión del Sistema</span>
+          <span class="version-badge" style="font-size: 0.82rem;">v1.1.1</span>
+        </div>
+
+        <h4 style="font-size: 0.95rem; font-weight: 700; margin-bottom: 0.4rem;">Copia de Seguridad</h4>
+        <p style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 0.85rem;">
+          Descarga un archivo ZIP completo con tu base de datos y todas las fotos subidas.
+        </p>
+        <a href="/api/backup/download" class="btn btn-success full-width">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="7 10 12 15 17 10"></polyline>
+            <line x1="12" y1="15" x2="12" y2="3"></line>
+          </svg>
+          Descargar Respaldo Completo (.zip)
+        </a>
+
+        <hr style="margin: 1.5rem 0; border: 0; border-top: 1px solid var(--border-subtle);">
+
+        <h4 style="font-size: 0.95rem; font-weight: 700; margin-bottom: 0.4rem;">Cambiar Contraseña</h4>
+        <form id="formCambiarPass" onsubmit="cambiarPassword(event)" style="margin-top: 0.75rem;">
+          <div class="form-group">
+            <label for="passActual">Contraseña actual</label>
+            <input type="password" id="passActual" required placeholder="••••">
+          </div>
+          <div class="form-group">
+            <label for="passNueva">Nueva contraseña</label>
+            <input type="password" id="passNueva" required minlength="4" placeholder="••••">
+          </div>
+          <button type="submit" class="btn btn-primary full-width">Actualizar Contraseña</button>
+        </form>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- MODAL: CAMBIAR TASA DE CAMBIO -->
+  <dialog id="modalTasa" class="modal">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>Ajustar Tipo de Cambio</h3>
+        <button class="btn-close" onclick="cerrarModal('modalTasa')">✕</button>
+      </div>
+      <form id="formTasa" onsubmit="guardarTasa(event)">
+        <div class="form-group">
+          <label for="nuevaTasaInput">Tipo de cambio ($1 USD en Quetzales)</label>
+          <div class="input-prefix-wrapper">
+            <span class="prefix">Q</span>
+            <input type="number" step="0.01" min="1" id="nuevaTasaInput" required>
+          </div>
+          <small style="font-size: 0.78rem; color: var(--text-muted); margin-top: 0.4rem;">
+            El sistema se sincroniza automáticamente, pero puedes ajustar la tasa que usas con tus clientes.
+          </small>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-outline" onclick="cerrarModal('modalTasa')">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Actualizar Tasa</button>
+        </div>
+      </form>
+    </div>
+  </dialog>
+
+  <div id="areaImpresionRecibo" class="print-only"></div>
+
+  <script src="/static/app.js?v=9.0"></script>
+</body>
+</html>
