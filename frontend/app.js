@@ -627,6 +627,7 @@ function crearCardVenta(v, esCompletada) {
     </div>
 
     <div class="venta-footer">
+      ${v.estado === 'activa' ? `<button class="btn btn-outline" onclick="abrirEditarVenta(${v.id})">Editar</button>` : ''}
       ${!esCompletada ? `
         <button class="btn btn-success flex-1" onclick="abrirModalAbono(${v.id})">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
@@ -654,6 +655,56 @@ function crearCardVenta(v, esCompletada) {
 }
 
 // 3. REGISTRAR ABONO
+async function abrirEditarVenta(id) {
+  try {
+    const res = await fetch(`/api/ventas/${id}`);
+    if (!res.ok) throw new Error('No se pudo cargar el fiado');
+    const v = await res.json();
+    if (v.estado !== 'activa') throw new Error('Este fiado ya no está activo');
+    const values = {editarVentaId: v.id, editarCliente: v.comprador_nombre,
+      editarTelefono: v.comprador_telefono, editarFecha: v.fecha_venta,
+      editarDia: v.dia_pago_mes, editarTotal: v.total_gtq,
+      editarEntrega: v.detalles_entrega, editarNotas: v.notas};
+    Object.entries(values).forEach(([key, value]) => { document.getElementById(key).value = value ?? ''; });
+    document.getElementById('formEditarVenta').dataset.abonado = v.total_abonado;
+    document.getElementById('editarTotal').min = Math.max(0.01, v.total_abonado);
+    actualizarSaldoEdicion();
+    abrirModal('modalEditarVenta');
+  } catch (err) { mostrarToast(err.message, 'error'); }
+}
+
+function actualizarSaldoEdicion() {
+  const abonado = Number(document.getElementById('formEditarVenta').dataset.abonado || 0);
+  const total = Number(document.getElementById('editarTotal').value || 0);
+  document.getElementById('editarVentaResumen').textContent =
+    `Abonado: Q${abonado.toFixed(2)} · Saldo al guardar: Q${Math.max(0, total - abonado).toFixed(2)}`;
+}
+
+async function guardarEdicionVenta(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const button = form.querySelector('[type="submit"]');
+  if (button.disabled) return;
+  button.disabled = true;
+  button.textContent = 'Guardando…';
+  try {
+    const value = id => document.getElementById(id).value;
+    const res = await fetch(`/api/ventas/${value('editarVentaId')}`, {
+      method: 'PUT', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({comprador_nombre: value('editarCliente'),
+        comprador_telefono: value('editarTelefono'), fecha_venta: value('editarFecha'),
+        dia_pago_mes: Number(value('editarDia')), total_gtq: value('editarTotal'),
+        detalles_entrega: value('editarEntrega'), notas: value('editarNotas')})
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'Revisa los campos del formulario');
+    cerrarModal('modalEditarVenta');
+    await Promise.all([cargarVentas(), cargarDashboard()]);
+    mostrarToast('Fiado actualizado correctamente', 'exito');
+  } catch (err) { mostrarToast(err.message, 'error'); }
+  finally { button.disabled = false; button.textContent = 'Guardar cambios'; }
+}
+
 function abrirModalAbono(ventaId) {
   const v = appState.ventas.find(x => x.id === ventaId);
   if (!v) return;
@@ -1550,7 +1601,10 @@ function abrirFotoFull(urlsString, titulo) {
 // 10. MODAL UTILITIES
 function abrirModal(id) {
   const m = document.getElementById(id);
-  if (m) m.showModal();
+  if (m) {
+    m.showModal();
+    m.querySelectorAll('form, .modal-body').forEach(el => { el.scrollTop = 0; });
+  }
 }
 
 function cerrarModal(id) {

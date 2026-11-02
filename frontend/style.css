@@ -1708,6 +1708,67 @@ textarea:focus {
   }
 }
 
+.edit-sale-summary {
+  padding: 1rem;
+  margin-bottom: 1.25rem;
+  background: var(--primary-light);
+  color: var(--text-main);
+  border-radius: var(--radius-md);
+  font-weight: 600;
+  line-height: 1.6;
+}
+.edit-sale-help { color: var(--text-muted); font-size: .85rem; line-height: 1.6; }
+.venta-footer { flex-wrap: wrap; }
+button:focus-visible, a:focus-visible { outline: 3px solid var(--border-focus); outline-offset: 3px; }
+
+@media (max-width: 768px) {
+  body { padding: .75rem; }
+  .main-header { border-radius: 18px; position: static; }
+  .header-brand { min-width: 0; }
+  .header-actions { flex-wrap: wrap; gap: .5rem; }
+  .header-actions .btn-primary { flex: 1 0 100%; order: -1; }
+  .btn, .btn-sm, .btn-close { min-height: 44px; }
+  .btn-close { min-width: 44px; flex-shrink: 0; }
+  .metrics-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .625rem; }
+  .metric-card { padding: .85rem; min-width: 0; gap: .25rem; }
+  .metric-info { min-width: 0; }
+  .metric-title { font-size: .7rem; }
+  .metric-value { font-size: clamp(1rem, 4.4vw, 1.5rem); overflow-wrap: anywhere; }
+  .metric-icon-wrap { display: none; }
+  .metric-subline { flex-wrap: wrap; }
+  .nav-tabs-wrapper {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: .375rem;
+    padding: .375rem;
+    border-radius: 16px;
+  }
+  .tab-btn { min-width: 0; min-height: 48px; padding: .65rem .5rem; font-size: .75rem; gap: .375rem; white-space: normal; }
+  .tab-btn svg { flex-shrink: 0; width: 16px; }
+  .tab-counter { padding: .125rem .375rem; }
+  .toolbar { flex-direction: column; align-items: stretch; gap: .75rem; }
+  .search-box { width: 100%; min-width: 0; max-width: none; }
+  .venta-card { border-radius: 18px; min-width: 0; }
+  .venta-header, .venta-body { padding: 1rem; }
+  .venta-header { flex-wrap: wrap; gap: .75rem; }
+  .venta-footer { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); padding: .875rem; gap: .5rem; }
+  .venta-footer .btn { padding: .65rem .5rem; font-size: .8rem; }
+  .venta-footer .btn-success { grid-column: 1 / -1; order: -1; }
+  .form-group { min-width: 0; }
+  input[type="text"], input[type="password"], input[type="number"], input[type="tel"],
+  input[type="date"], select, textarea, .search-box input[type="text"] { font-size: 16px; }
+  dialog.modal { height: 100dvh !important; max-height: 100dvh !important; padding: .5rem !important; }
+  .modal-box, .modal-box.large { max-width: 100%; max-height: calc(100dvh - 1rem); border-radius: 18px; }
+  .modal-header { padding: .75rem 1rem; }
+  .modal-header h3 { font-size: 1.05rem; }
+  .modal form, .modal-body { padding: 1rem; min-height: 0; overscroll-behavior: contain; }
+  .modal-actions { flex-wrap: wrap; padding-bottom: env(safe-area-inset-bottom); }
+  .modal-actions .btn { flex: 1 1 120px; }
+  .table-container { max-width: 100%; overflow-x: auto; }
+  .toast-container { top: auto; bottom: max(1rem, env(safe-area-inset-bottom)); right: .75rem; left: .75rem; }
+  .toast { min-width: 0; width: 100%; }
+}
+
 /* ==========================================================================
    ESTILOS DE IMPRESIÓN FORMAL
    ========================================================================== */

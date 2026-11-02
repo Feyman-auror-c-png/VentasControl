@@ -149,6 +149,22 @@ docker compose exec ventascontrol python -m backend.manage_users \
 Los usuarios del mismo espacio comparten ventas, inventario, abonos y
 configuración. Los usuarios de espacios diferentes mantienen sus datos aislados.
 
+### Edición de fiados y uso en teléfono
+
+En **Fiados Activos**, pulsa **Editar** para corregir cliente, WhatsApp, fecha,
+día de pago, total acordado, detalles de entrega o notas. Los abonos y artículos
+se conservan: el total no puede quedar por debajo de lo abonado; si coincide,
+el fiado pasa a completado. La edición respeta el espacio de trabajo del usuario.
+
+En teléfonos, las métricas y pestañas se distribuyen en dos columnas; los botones
+tienen áreas táctiles mayores y los formularios se adaptan a la altura disponible.
+
+Pruebas de la edición, con base de datos temporal independiente:
+
+```bash
+python -m unittest discover -s tests -v
+```
+
 ### Despliegue con Docker
 
 ```bash

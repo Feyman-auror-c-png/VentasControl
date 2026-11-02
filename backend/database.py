@@ -48,8 +48,77 @@ def init_workspace_config(cursor, workspace_id: int, socio_1: str, socio_2: str)
         )
 
 
+def _has_column(conn: sqlite3.Connection, table: str, column: str) -> bool:
+    return any(row[1] == column for row in conn.execute(f"PRAGMA table_info({table})"))
+
+
+def _migrate_legacy_workspace_schema(conn: sqlite3.Connection) -> None:
+    """Attach data from pre-workspace databases to one default workspace."""
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS workspaces (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nombre TEXT NOT NULL UNIQUE,
+            creado_en DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    tables = {
+        row["name"]
+        for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
+    }
+    legacy_tables = [
+        table
+        for table in ("usuarios", "productos", "ventas")
+        if table in tables and not _has_column(conn, table, "workspace_id")
+    ]
+    legacy_config = (
+        "configuracion" in tables
+        and not _has_column(conn, "configuracion", "workspace_id")
+    )
+    if not legacy_tables and not legacy_config:
+        return
+
+    conn.execute("INSERT OR IGNORE INTO workspaces (nombre) VALUES (?)", ("Familia Connor",))
+    workspace_id = conn.execute(
+        "SELECT id FROM workspaces WHERE nombre = ?", ("Familia Connor",)
+    ).fetchone()["id"]
+
+    for table in ("usuarios", "productos", "ventas"):
+        if table in legacy_tables:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN workspace_id INTEGER")
+        if table in tables:
+            conn.execute(
+                f"UPDATE {table} SET workspace_id = ? WHERE workspace_id IS NULL",
+                (workspace_id,),
+            )
+
+    if legacy_config:
+        conn.executescript(
+            """
+            ALTER TABLE configuracion RENAME TO configuracion_legacy;
+            CREATE TABLE configuracion (
+                workspace_id INTEGER NOT NULL,
+                clave TEXT NOT NULL,
+                valor TEXT NOT NULL,
+                PRIMARY KEY (workspace_id, clave),
+                FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
+            );
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO configuracion (workspace_id, clave, valor)
+            SELECT ?, clave, valor FROM configuracion_legacy
+            """,
+            (workspace_id,),
+        )
+        conn.execute("DROP TABLE configuracion_legacy")
+
+
 def init_db():
     with get_db() as conn:
+        _migrate_legacy_workspace_schema(conn)
         conn.executescript(
             """
             CREATE TABLE IF NOT EXISTS workspaces (

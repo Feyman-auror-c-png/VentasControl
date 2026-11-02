@@ -9,7 +9,8 @@ from typing import List, Optional
 from fastapi import Depends, FastAPI, HTTPException, UploadFile, File
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
+from decimal import Decimal
 
 from .database import (
     init_db, get_db, hash_password,
@@ -65,6 +66,22 @@ class AbonoCreate(BaseModel):
     numero_boleta: Optional[str] = ""
     foto_comprobante: Optional[str] = ""
     nota: Optional[str] = ""
+
+class VentaUpdate(BaseModel):
+    comprador_nombre: str = Field(min_length=1, max_length=200)
+    comprador_telefono: str = Field(default="", max_length=40)
+    fecha_venta: date
+    dia_pago_mes: int = Field(ge=1, le=31)
+    total_gtq: Decimal = Field(gt=0, max_digits=12, decimal_places=2)
+    detalles_entrega: str = Field(default="", max_length=4000)
+    notas: str = Field(default="", max_length=4000)
+
+    @field_validator("comprador_nombre")
+    @classmethod
+    def nombre_no_vacio(cls, value):
+        if not value.strip():
+            raise ValueError("Escribe el nombre del cliente")
+        return value.strip()
 
 class ProductoCreate(BaseModel):
     nombre: str
@@ -517,6 +534,37 @@ def obtener_venta(venta_id: int, user=Depends(get_current_user)):
             "abonos": abonos
         }
         return venta_obj
+
+@app.put("/api/ventas/{venta_id}")
+def actualizar_venta(venta_id: int, data: VentaUpdate, user=Depends(get_current_user)):
+    with get_db() as conn:
+        # Serialize edits with payments so the outstanding balance stays consistent.
+        conn.execute("BEGIN IMMEDIATE")
+        venta = conn.execute(
+            "SELECT * FROM ventas WHERE id = ? AND workspace_id = ?",
+            (venta_id, user["workspace_id"]),
+        ).fetchone()
+        if not venta:
+            raise HTTPException(status_code=404, detail="Venta no encontrada")
+        if venta["estado"] != "activa":
+            raise HTTPException(status_code=409, detail="Solo puedes editar fiados activos")
+        abonado = Decimal(str(conn.execute(
+            "SELECT COALESCE(SUM(monto_gtq), 0) FROM abonos WHERE venta_id = ?",
+            (venta_id,),
+        ).fetchone()[0])).quantize(Decimal("0.01"))
+        if data.total_gtq < abonado:
+            raise HTTPException(status_code=400, detail="El total no puede ser menor que los abonos recibidos")
+        estado = "completada" if data.total_gtq == abonado else "activa"
+        conn.execute(
+            """UPDATE ventas SET comprador_nombre=?, comprador_telefono=?, fecha_venta=?,
+               dia_pago_mes=?, total_gtq=?, detalles_entrega=?, notas=?, estado=?
+               WHERE id=? AND workspace_id=?""",
+            (data.comprador_nombre, data.comprador_telefono.strip(), data.fecha_venta.isoformat(),
+             data.dia_pago_mes, float(data.total_gtq), data.detalles_entrega.strip(),
+             data.notas.strip(), estado, venta_id, user["workspace_id"]),
+        )
+    return {"ok": True, "estado": estado, "saldo_pendiente": float(data.total_gtq - abonado)}
+
 
 @app.delete("/api/ventas/{venta_id}")
 def eliminar_venta(venta_id: int, user=Depends(get_current_user)):
